@@ -4,6 +4,8 @@ import { SearchSection } from "@/components/search-section";
 import { EntryGrid } from "@/components/entry-grid";
 import { AddEntryModal } from "@/components/add-entry-modal";
 import { EntryDetailModal } from "@/components/entry-detail-modal";
+import { EditEntryModal } from "@/components/edit-entry-modal";
+import { useAuth } from "@/hooks/useAuth";
 import type { Entry } from "@shared/schema";
 
 export default function Home() {
@@ -11,7 +13,9 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
+  const [editEntry, setEditEntry] = useState<Entry | null>(null);
   const [sortOrder, setSortOrder] = useState("alphabetical");
+  const { isAuthenticated } = useAuth();
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -27,6 +31,15 @@ export default function Home() {
 
   const handleCloseDetail = () => {
     setSelectedEntry(null);
+  };
+
+  const handleEditEntry = (entry: Entry) => {
+    setSelectedEntry(null); // Close detail modal
+    setEditEntry(entry); // Open edit modal
+  };
+
+  const handleCloseEdit = () => {
+    setEditEntry(null);
   };
 
   return (
@@ -78,6 +91,13 @@ export default function Home() {
       <EntryDetailModal
         entry={selectedEntry}
         onClose={handleCloseDetail}
+        onEdit={handleEditEntry}
+      />
+
+      <EditEntryModal
+        entry={editEntry}
+        open={!!editEntry}
+        onClose={handleCloseEdit}
       />
     </div>
   );

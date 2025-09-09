@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,16 +9,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { insertEntrySchema, type InsertEntry } from "@shared/schema";
+import { insertEntrySchema, type InsertEntry, type Entry } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
-interface AddEntryModalProps {
+interface EditEntryModalProps {
+  entry: Entry | null;
   open: boolean;
   onClose: () => void;
 }
 
-export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
+export function EditEntryModal({ entry, open, onClose }: EditEntryModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -33,18 +34,31 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
     },
   });
 
-  const createEntryMutation = useMutation({
+  // Update form when entry changes
+  useEffect(() => {
+    if (entry && open) {
+      form.reset({
+        title: entry.title,
+        category: entry.category,
+        description: entry.description,
+        relatedTerms: entry.relatedTerms || [],
+        sources: entry.sources || "",
+      });
+    }
+  }, [entry, open, form]);
+
+  const updateEntryMutation = useMutation({
     mutationFn: async (data: InsertEntry) => {
-      const response = await apiRequest("POST", "/api/entries", data);
+      if (!entry) throw new Error("No entry to update");
+      const response = await apiRequest("PUT", `/api/entries/${entry.id}`, data);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/entries"] });
       toast({
-        title: "Entry created",
-        description: "Your Norse mythology entry has been added successfully.",
+        title: "Entry updated",
+        description: "Your Norse mythology entry has been updated successfully.",
       });
-      form.reset();
       onClose();
     },
     onError: (error) => {
@@ -61,7 +75,7 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
       }
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create entry",
+        description: error instanceof Error ? error.message : "Failed to update entry",
         variant: "destructive",
       });
     },
@@ -73,7 +87,7 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
       ...data,
       relatedTerms: data.relatedTerms || [],
     };
-    createEntryMutation.mutate(formData);
+    updateEntryMutation.mutate(formData);
   };
 
   const handleRelatedTermsChange = (value: string) => {
@@ -81,15 +95,17 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
     form.setValue("relatedTerms", terms);
   };
 
+  if (!entry) return null;
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-add-entry">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="modal-edit-entry">
         <DialogHeader>
-          <DialogTitle data-testid="modal-title">Add New Entry</DialogTitle>
+          <DialogTitle data-testid="modal-title">Edit Entry</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" data-testid="form-add-entry">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" data-testid="form-edit-entry">
             <FormField
               control={form.control}
               name="title"
@@ -114,7 +130,7 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-category">
                         <SelectValue placeholder="Select a category" />
@@ -208,10 +224,10 @@ export function AddEntryModal({ open, onClose }: AddEntryModalProps) {
               </Button>
               <Button 
                 type="submit" 
-                disabled={createEntryMutation.isPending}
+                disabled={updateEntryMutation.isPending}
                 data-testid="button-submit"
               >
-                {createEntryMutation.isPending ? "Adding..." : "Add Entry"}
+                {updateEntryMutation.isPending ? "Updating..." : "Update Entry"}
               </Button>
             </div>
           </form>

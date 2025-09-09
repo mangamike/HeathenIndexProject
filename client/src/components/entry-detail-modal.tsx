@@ -1,11 +1,14 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Crown, Castle, Hammer, Flame, Heart, TreePine } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Crown, Castle, Hammer, Flame, Heart, TreePine, Edit } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import type { Entry } from "@shared/schema";
 
 interface EntryDetailModalProps {
   entry: Entry | null;
   onClose: () => void;
+  onEdit?: (entry: Entry) => void;
 }
 
 const categoryIcons = {
@@ -26,7 +29,9 @@ const categoryColors = {
   event: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
 };
 
-export function EntryDetailModal({ entry, onClose }: EntryDetailModalProps) {
+export function EntryDetailModal({ entry, onClose, onEdit }: EntryDetailModalProps) {
+  const { isAuthenticated } = useAuth();
+  
   if (!entry) return null;
 
   const IconComponent = categoryIcons[entry.category as keyof typeof categoryIcons] || Flame;
@@ -46,16 +51,29 @@ export function EntryDetailModal({ entry, onClose }: EntryDetailModalProps) {
     <Dialog open={!!entry} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="modal-entry-detail">
         <DialogHeader>
-          <div className="flex items-center space-x-3">
-            <IconComponent className="text-secondary text-xl" />
-            <div>
-              <DialogTitle className="text-xl" data-testid="detail-title">
-                {entry.title}
-              </DialogTitle>
-              <Badge className={`text-xs font-medium ${categoryColorClass}`} data-testid="detail-category">
-                {entry.category.charAt(0).toUpperCase() + entry.category.slice(1)}
-              </Badge>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <IconComponent className="text-secondary text-xl" />
+              <div>
+                <DialogTitle className="text-xl" data-testid="detail-title">
+                  {entry.title}
+                </DialogTitle>
+                <Badge className={`text-xs font-medium ${categoryColorClass}`} data-testid="detail-category">
+                  {entry.category.charAt(0).toUpperCase() + entry.category.slice(1)}
+                </Badge>
+              </div>
             </div>
+            {isAuthenticated && onEdit && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => onEdit(entry)}
+                data-testid="button-edit-entry"
+              >
+                <Edit className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+            )}
           </div>
         </DialogHeader>
         
