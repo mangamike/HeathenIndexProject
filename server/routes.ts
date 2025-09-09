@@ -2,9 +2,24 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertEntrySchema } from "@shared/schema";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth middleware
+  await setupAuth(app);
+
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
   // Get all entries with optional search and category filter
   app.get("/api/entries", async (req, res) => {
     try {
@@ -57,11 +72,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new entry
-  app.post("/api/entries", async (req, res) => {
+  app.post("/api/entries", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertEntrySchema.parse(req.body);
-      // TODO: Replace with actual user ID from authentication
-      const entry = await storage.createEntry(validatedData, "system");
+      const userId = req.user.claims.sub;
+      const entry = await storage.createEntry(validatedData, userId);
       res.status(201).json(entry);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -78,13 +93,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update entry
-  app.put("/api/entries/:id", async (req, res) => {
+  app.put("/api/entries/:id", isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const validatedData = insertEntrySchema.partial().parse(req.body);
       
-      // TODO: Replace with actual user ID from authentication  
-      const updatedEntry = await storage.updateEntry(id, validatedData, "system");
+      const userId = req.user.claims.sub;
+      const updatedEntry = await storage.updateEntry(id, validatedData, userId);
       
       if (!updatedEntry) {
         return res.status(404).json({ message: "Entry not found" });
@@ -106,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete entry
-  app.delete("/api/entries/:id", async (req, res) => {
+  app.delete("/api/entries/:id", isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteEntry(id);

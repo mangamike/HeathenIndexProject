@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Menu, X, User, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AppHeaderProps {
   onShowAddForm: () => void;
@@ -8,6 +10,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ onShowAddForm }: AppHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, isAuthenticated, isLoading } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -33,14 +36,45 @@ export function AppHeader({ onShowAddForm }: AppHeaderProps) {
             >
               Browse
             </a>
-            <Button 
-              variant="ghost" 
-              className="text-sm font-medium text-muted-foreground hover:text-foreground"
-              onClick={onShowAddForm}
-              data-testid="nav-add-entry"
-            >
-              Add Entry
-            </Button>
+            {isAuthenticated ? (
+              <>
+                <Button 
+                  variant="ghost" 
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                  onClick={onShowAddForm}
+                  data-testid="nav-add-entry"
+                >
+                  Add Entry
+                </Button>
+                <div className="flex items-center space-x-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.profileImageUrl || undefined} alt="Profile" />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => window.location.href = '/api/logout'}
+                    data-testid="button-logout"
+                  >
+                    <LogOut className="h-4 w-4 mr-1" />
+                    Logout
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Button 
+                variant="default" 
+                size="sm"
+                onClick={() => window.location.href = '/api/login'}
+                data-testid="button-login"
+                disabled={isLoading}
+              >
+                {isLoading ? "Loading..." : "Login"}
+              </Button>
+            )}
           </nav>
 
           {/* Mobile menu button */}
@@ -66,17 +100,41 @@ export function AppHeader({ onShowAddForm }: AppHeaderProps) {
               >
                 Browse
               </a>
-              <Button
-                variant="ghost"
-                className="w-full justify-start px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md"
-                onClick={() => {
-                  onShowAddForm();
-                  setMobileMenuOpen(false);
-                }}
-                data-testid="mobile-nav-add-entry"
-              >
-                Add Entry
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md"
+                    onClick={() => {
+                      onShowAddForm();
+                      setMobileMenuOpen(false);
+                    }}
+                    data-testid="mobile-nav-add-entry"
+                  >
+                    Add Entry
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md"
+                    onClick={() => window.location.href = '/api/logout'}
+                    data-testid="mobile-nav-logout"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md"
+                  onClick={() => window.location.href = '/api/login'}
+                  data-testid="mobile-nav-login"
+                  disabled={isLoading}
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  {isLoading ? "Loading..." : "Login"}
+                </Button>
+              )}
             </nav>
           </div>
         )}
