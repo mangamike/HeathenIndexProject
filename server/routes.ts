@@ -60,7 +60,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/entries", async (req, res) => {
     try {
       const validatedData = insertEntrySchema.parse(req.body);
-      const entry = await storage.createEntry(validatedData);
+      // TODO: Replace with actual user ID from authentication
+      const entry = await storage.createEntry(validatedData, "system");
       res.status(201).json(entry);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -82,7 +83,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const validatedData = insertEntrySchema.partial().parse(req.body);
       
-      const updatedEntry = await storage.updateEntry(id, validatedData);
+      // TODO: Replace with actual user ID from authentication  
+      const updatedEntry = await storage.updateEntry(id, validatedData, "system");
       
       if (!updatedEntry) {
         return res.status(404).json({ message: "Entry not found" });

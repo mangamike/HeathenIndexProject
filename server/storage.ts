@@ -1,22 +1,125 @@
-import { type Entry, type InsertEntry, type User, type InsertUser } from "@shared/schema";
+import { type Entry, type InsertEntry, type User, type UpsertUser } from "@shared/schema";
+import { users, entries } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  upsertUser(user: UpsertUser): Promise<User>;
   
   // Entry methods
   getEntry(id: string): Promise<Entry | undefined>;
   getAllEntries(): Promise<Entry[]>;
   searchEntries(query: string, category?: string): Promise<Entry[]>;
-  createEntry(entry: InsertEntry): Promise<Entry>;
-  updateEntry(id: string, updates: Partial<InsertEntry>): Promise<Entry | undefined>;
+  createEntry(entry: InsertEntry, userId: string): Promise<Entry>;
+  updateEntry(id: string, updates: Partial<InsertEntry>, userId: string): Promise<Entry | undefined>;
   deleteEntry(id: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
+export class DatabaseStorage implements IStorage {
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  async getEntry(id: string): Promise<Entry | undefined> {
+    const [entry] = await db.select().from(entries).where(eq(entries.id, id));
+    return entry;
+  }
+
+  async getAllEntries(): Promise<Entry[]> {
+    return await db.select().from(entries).orderBy(entries.title);
+  }
+
+  async searchEntries(query: string, category?: string): Promise<Entry[]> {
+    let dbQuery = db.select().from(entries);
+    
+    // This is a simplified search - in production you'd want full-text search
+    if (query || (category && category !== 'all')) {
+      // For now, just return all entries and filter in memory
+      // In production, you'd use PostgreSQL full-text search
+      const allEntries = await db.select().from(entries).orderBy(entries.title);
+      
+      let filteredEntries = allEntries;
+      
+      // Filter by category if provided
+      if (category && category !== 'all') {
+        filteredEntries = filteredEntries.filter(entry => 
+          entry.category.toLowerCase() === category.toLowerCase()
+        );
+      }
+      
+      // Search by query if provided
+      if (query) {
+        const searchTerm = query.toLowerCase();
+        filteredEntries = filteredEntries.filter(entry => {
+          return (
+            entry.title.toLowerCase().includes(searchTerm) ||
+            entry.description.toLowerCase().includes(searchTerm) ||
+            entry.relatedTerms?.some(term => term.toLowerCase().includes(searchTerm)) ||
+            false
+          );
+        });
+      }
+      
+      return filteredEntries;
+    }
+    
+    return await db.select().from(entries).orderBy(entries.title);
+  }
+
+  async createEntry(insertEntry: InsertEntry, userId: string): Promise<Entry> {
+    const [entry] = await db
+      .insert(entries)
+      .values({
+        ...insertEntry,
+        createdBy: userId,
+        relatedTerms: insertEntry.relatedTerms || null,
+        sources: insertEntry.sources || null,
+      })
+      .returning();
+    return entry;
+  }
+
+  async updateEntry(id: string, updates: Partial<InsertEntry>, userId: string): Promise<Entry | undefined> {
+    const [entry] = await db
+      .update(entries)
+      .set({
+        ...updates,
+        relatedTerms: updates.relatedTerms || null,
+        sources: updates.sources || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(entries.id, id))
+      .returning();
+    return entry;
+  }
+
+  async deleteEntry(id: string): Promise<boolean> {
+    const result = await db.delete(entries).where(eq(entries.id, id));
+    return result.rowCount > 0;
+  }
+}
+
+// Keep the MemStorage class for development/fallback
+class MemStorage implements IStorage {
   private users: Map<string, User>;
   private entries: Map<string, Entry>;
 
@@ -79,6 +182,7 @@ export class MemStorage implements IStorage {
       const fullEntry: Entry = {
         ...entry,
         id,
+        createdBy: 'system', // Sample entries created by system
         relatedTerms: entry.relatedTerms || null,
         sources: entry.sources || null,
         createdAt: new Date(),
@@ -93,15 +197,14 @@ export class MemStorage implements IStorage {
     return this.users.get(id);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const id = userData.id || randomUUID();
+    const user: User = { 
+      ...userData, 
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     this.users.set(id, user);
     return user;
   }
@@ -145,11 +248,12 @@ export class MemStorage implements IStorage {
     return filteredEntries.sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  async createEntry(insertEntry: InsertEntry): Promise<Entry> {
+  async createEntry(insertEntry: InsertEntry, userId: string): Promise<Entry> {
     const id = randomUUID();
     const entry: Entry = {
       ...insertEntry,
       id,
+      createdBy: userId,
       relatedTerms: insertEntry.relatedTerms || null,
       sources: insertEntry.sources || null,
       createdAt: new Date(),
@@ -159,13 +263,15 @@ export class MemStorage implements IStorage {
     return entry;
   }
 
-  async updateEntry(id: string, updates: Partial<InsertEntry>): Promise<Entry | undefined> {
+  async updateEntry(id: string, updates: Partial<InsertEntry>, userId: string): Promise<Entry | undefined> {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     
     const updatedEntry: Entry = {
       ...entry,
       ...updates,
+      relatedTerms: updates.relatedTerms || entry.relatedTerms,
+      sources: updates.sources || entry.sources,
       updatedAt: new Date(),
     };
     
@@ -178,4 +284,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
